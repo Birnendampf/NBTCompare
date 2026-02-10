@@ -1,0 +1,126 @@
+use pyo3::exceptions::PyValueError;
+use pyo3::prelude::*;
+use std::collections::HashMap;
+use std::io::{Error, ErrorKind};
+
+#[derive(PartialEq)]
+enum RawCompound<'a> {
+    Mem(&'a [u8]),
+    Map(HashMap<&'a [u8], RawCompound<'a>>),
+    List(Vec<RawCompound<'a>>),
+}
+type ParseFuncType = for<'a> fn(&mut &'a [u8]) -> PyResult<RawCompound<'a>>;
+
+const TAG_LUT: [Option<ParseFuncType>; 13] = [
+    None,                       //  TAG_End
+    Some(get_raw_numeric::<1>), //  TAG_Byte
+    Some(get_raw_numeric::<2>), //  TAG_Short
+    Some(get_raw_numeric::<4>), //  TAG_Int
+    Some(get_raw_numeric::<8>), //  TAG_Long
+    Some(get_raw_numeric::<4>), //  TAG_Float
+    Some(get_raw_numeric::<8>), //  TAG_Double
+    Some(get_raw_array::<1>),   //  TAG_Byte_Array
+    Some(get_raw_string),       //  TAG_String
+    Some(get_raw_list),         //  TAG_List
+    Some(get_raw_compound),     //  TAG_Compound
+    Some(get_raw_array::<4>),   //  TAG_Int_Array
+    Some(get_raw_array::<8>),   //  TAG_Long_Array
+];
+const TAG_SIZE_LUT: [u8; 7] = [0, 1, 2, 4, 8, 4, 8];
+
+fn get_raw_numeric<'a, const N: usize>(data: &mut &'a [u8]) -> PyResult<RawCompound<'a>> {
+    let num = split_off(data, N)?;
+    Ok(RawCompound::Mem(num))
+}
+
+fn get_raw_array<'a, const N: usize>(data: &mut &'a [u8]) -> PyResult<RawCompound<'a>> {
+    let arr_len = u32::from_be_bytes(split_off_chunk(data)?);
+    Ok(RawCompound::Mem(split_off(data, N * arr_len as usize)?))
+}
+
+fn get_raw_string<'a>(data: &mut &'a [u8]) -> PyResult<RawCompound<'a>> {
+    let length = get_u16(data)? as usize;
+    Ok(RawCompound::Mem(split_off(data, length)?))
+}
+
+fn get_raw_list<'a>(data: &mut &'a [u8]) -> PyResult<RawCompound<'a>> {
+    let tag_id = get_u8(data)?;
+    let size = u32::from_be_bytes(split_off_chunk(data)?);
+    if tag_id < 7 {
+        let tag_size = TAG_SIZE_LUT[tag_id as usize];
+        let arr_byte_len = tag_size as usize * size as usize;
+        return Ok(RawCompound::Mem(split_off(data, arr_byte_len)?));
+    }
+    let parse_func = TAG_LUT
+        .get(tag_id as usize)
+        .ok_or(PyValueError::new_err("Unknown tag"))?
+        .unwrap();
+    let mut res = Vec::with_capacity(size as usize);
+    for _ in 0..size {
+        res.push(parse_func(data)?)
+    }
+
+    Ok(RawCompound::List(res))
+}
+
+fn get_raw_compound<'a>(data: &mut &'a [u8]) -> PyResult<RawCompound<'a>> {
+    let mut map = HashMap::new();
+    while let Some(parse_func) = TAG_LUT
+        .get(get_u8(data)? as usize)
+        .ok_or(PyValueError::new_err("Unknown tag"))?
+    {
+        let name_len = get_u16(data)?;
+        let name = split_off(data, name_len.into())?;
+        let compound = parse_func(data)?;
+        map.insert(name, compound);
+    }
+    Ok(RawCompound::Map(map))
+}
+
+fn load_nbt_raw(data: &'_ [u8]) -> PyResult<RawCompound<'_>> {
+    let mut data = data;
+    if get_u8(&mut data)? != 10 {
+        return Err(PyValueError::new_err("Root TAG is not compound"));
+    }
+    let name_len = get_u16(&mut data)?;
+    let _ = data.split_off(..name_len.into());
+    get_raw_compound(&mut data)
+}
+
+fn split_off<'a>(data: &mut &'a [u8], amount: usize) -> Result<&'a [u8], PyErr> {
+    let name = data
+        .split_off(..amount)
+        .ok_or(Error::new(ErrorKind::UnexpectedEof, "Unexpected EOF"))?;
+    Ok(name)
+}
+
+fn get_u16(data: &mut &[u8]) -> Result<u16, PyErr> {
+    Ok(u16::from_be_bytes(split_off_chunk(data)?))
+}
+
+fn get_u8(data: &mut &[u8]) -> Result<u8, PyErr> {
+    Ok(*data
+        .split_off_first()
+        .ok_or(Error::new(ErrorKind::UnexpectedEof, "Unexpected EOF"))?)
+}
+
+#[inline]
+fn split_off_chunk<const N: usize>(data: &mut &[u8]) -> Result<[u8; N], Error> {
+    let res: &[u8; N];
+    (res, *data) = data
+        .split_first_chunk()
+        .ok_or(Error::new(ErrorKind::UnexpectedEof, "Unexpected EOF"))?;
+    Ok(*res)
+}
+
+#[pymodule]
+mod _core {
+    use super::load_nbt_raw;
+    use pyo3::prelude::*;
+    use std::io::Error;
+
+    #[pyfunction]
+    fn compare(py: Python<'_>, left: &[u8], right: &[u8]) -> Result<bool, Error> {
+        py.detach(|| Ok(load_nbt_raw(left)? == load_nbt_raw(right)?))
+    }
+}
