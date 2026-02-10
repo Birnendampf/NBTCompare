@@ -126,10 +126,18 @@ fn split_off_chunk<const N: usize>(data: &mut &[u8]) -> Result<[u8; N], Error> {
 mod _core {
     use super::load_nbt_raw;
     use pyo3::prelude::*;
-    use std::io::Error;
 
     #[pyfunction]
-    fn compare(py: Python<'_>, left: &[u8], right: &[u8]) -> Result<bool, Error> {
-        py.detach(|| Ok(load_nbt_raw(left)? == load_nbt_raw(right)?))
+    fn compare(py: Python<'_>, left: &[u8], right: &[u8]) -> PyResult<bool> {
+        let (left, right) = py.detach(|| (load_nbt_raw(left), load_nbt_raw(right)));
+        let left = left.map_err(|e| {
+            e.add_note(py, "Occurred while parsing left").unwrap();
+            e
+        })?;
+        let right = right.map_err(|e| {
+            e.add_note(py, "Occurred while parsing right").unwrap();
+            e
+        })?;
+        py.detach(|| Ok(left == right))
     }
 }
