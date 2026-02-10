@@ -87,18 +87,18 @@ fn load_nbt_raw(data: &'_ [u8]) -> PyResult<RawCompound<'_>> {
     get_raw_compound(&mut data)
 }
 
-fn split_off<'a>(data: &mut &'a [u8], amount: usize) -> Result<&'a [u8], PyErr> {
+fn split_off<'a>(data: &mut &'a [u8], amount: usize) -> Result<&'a [u8], Error> {
     let name = data
         .split_off(..amount)
         .ok_or(Error::new(ErrorKind::UnexpectedEof, "Unexpected EOF"))?;
     Ok(name)
 }
 
-fn get_u16(data: &mut &[u8]) -> Result<u16, PyErr> {
+fn get_u16(data: &mut &[u8]) -> Result<u16, Error> {
     Ok(u16::from_be_bytes(split_off_chunk(data)?))
 }
 
-fn get_u8(data: &mut &[u8]) -> Result<u8, PyErr> {
+fn get_u8(data: &mut &[u8]) -> Result<u8, Error> {
     Ok(*data
         .split_off_first()
         .ok_or(Error::new(ErrorKind::UnexpectedEof, "Unexpected EOF"))?)
