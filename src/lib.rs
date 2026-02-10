@@ -1,4 +1,4 @@
-use pyo3::exceptions::PyValueError;
+use pyo3::exceptions::{PyOverflowError, PyValueError};
 use pyo3::prelude::*;
 use std::collections::HashMap;
 use std::io::{Error, ErrorKind};
@@ -35,7 +35,12 @@ fn get_raw_numeric<'a, const N: usize>(data: &mut &'a [u8]) -> PyResult<RawCompo
 
 fn get_raw_array<'a, const N: usize>(data: &mut &'a [u8]) -> PyResult<RawCompound<'a>> {
     let arr_len = u32::from_be_bytes(split_off_chunk(data)?);
-    Ok(RawCompound::Mem(split_off(data, N * arr_len as usize)?))
+    let byte_len = (arr_len as usize)
+        .checked_mul(N)
+        .ok_or(PyOverflowError::new_err(
+            "Overflow when calculating array length",
+        ))?;
+    Ok(RawCompound::Mem(split_off(data, byte_len)?))
 }
 
 fn get_raw_string<'a>(data: &mut &'a [u8]) -> PyResult<RawCompound<'a>> {
@@ -47,8 +52,12 @@ fn get_raw_list<'a>(data: &mut &'a [u8]) -> PyResult<RawCompound<'a>> {
     let tag_id = get_u8(data)?;
     let size = u32::from_be_bytes(split_off_chunk(data)?);
     if tag_id < 7 {
-        let tag_size = TAG_SIZE_LUT[tag_id as usize];
-        let arr_byte_len = tag_size as usize * size as usize;
+        let tag_size: usize = TAG_SIZE_LUT[tag_id as usize].into();
+        let arr_byte_len = tag_size
+            .checked_mul(size as usize)
+            .ok_or(PyOverflowError::new_err(
+                "Overflow when calculating list length",
+            ))?;
         return Ok(RawCompound::Mem(split_off(data, arr_byte_len)?));
     }
     let parse_func = TAG_LUT
