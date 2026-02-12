@@ -124,11 +124,17 @@ fn split_off_chunk<const N: usize>(data: &mut &[u8]) -> Result<[u8; N], Error> {
 
 #[pymodule]
 mod _core {
-    use super::load_nbt_raw;
+    use super::{load_nbt_raw, RawCompound};
     use pyo3::prelude::*;
 
     #[pyfunction]
-    fn compare(py: Python<'_>, left: &[u8], right: &[u8]) -> PyResult<bool> {
+    #[pyo3(signature = (left, right, exclude_last_update = false))]
+    fn compare(
+        py: Python<'_>,
+        left: &[u8],
+        right: &[u8],
+        exclude_last_update: bool,
+    ) -> PyResult<bool> {
         let (left, right) = py.detach(|| (load_nbt_raw(left), load_nbt_raw(right)));
         let left = left.map_err(|e| {
             e.add_note(py, "Occurred while parsing left").unwrap();
@@ -138,6 +144,20 @@ mod _core {
             e.add_note(py, "Occurred while parsing right").unwrap();
             e
         })?;
-        py.detach(|| Ok(left == right))
+        py.detach(|| {
+            if exclude_last_update {
+                let (RawCompound::Map(mut left_compound), RawCompound::Map(mut right_compound)) =
+                    (left, right)
+                else {
+                    unreachable!();
+                };
+                let last_update = b"LastUpdate".as_slice();
+                left_compound.remove(last_update);
+                right_compound.remove(last_update);
+                Ok(left_compound == right_compound)
+            } else {
+                Ok(left == right)
+            }
+        })
     }
 }
