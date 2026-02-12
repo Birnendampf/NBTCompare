@@ -39,7 +39,8 @@ fn get_raw_array<'a, const N: usize>(data: &mut &'a [u8]) -> PyResult<RawCompoun
     let byte_len = (arr_len as usize)
         .checked_mul(N)
         .ok_or(PyOverflowError::new_err(
-            "Overflow when calculating array length",
+            "Overflow when calculating array length \
+            (consider using a 64 bit version of this package)",
         ))?;
     Ok(RawCompound::Mem(split_off(data, byte_len)?))
 }
@@ -57,13 +58,14 @@ fn get_raw_list<'a>(data: &mut &'a [u8]) -> PyResult<RawCompound<'a>> {
         let arr_byte_len = tag_size
             .checked_mul(size as usize)
             .ok_or(PyOverflowError::new_err(
-                "Overflow when calculating list length",
+                "Overflow when calculating list length \
+            (consider using a 64 bit version of this package)",
             ))?;
         return Ok(RawCompound::Mem(split_off(data, arr_byte_len)?));
     }
     let parse_func = TAG_LUT
         .get(tag_id as usize)
-        .ok_or(PyValueError::new_err("Unknown tag"))?
+        .ok_or_else(|| PyValueError::new_err(format!("Unknown tag id: {tag_id}")))?
         .unwrap();
     let mut res = Vec::with_capacity(size as usize);
     for _ in 0..size {
