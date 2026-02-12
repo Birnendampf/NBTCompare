@@ -128,7 +128,7 @@ fn split_off_chunk<const N: usize>(data: &mut &[u8]) -> io::Result<[u8; N]> {
 
 #[pymodule]
 mod _core {
-    use super::{load_nbt_raw, RawCompound};
+    use super::do_compare;
     use pyo3::prelude::*;
 
     #[pyfunction]
@@ -139,29 +139,30 @@ mod _core {
         right: &[u8],
         exclude_last_update: bool,
     ) -> PyResult<bool> {
-        let (left, right) = py.detach(|| (load_nbt_raw(left), load_nbt_raw(right)));
-        let left = left.map_err(|e| {
-            e.add_note(py, "Occurred while parsing left").unwrap();
-            e
-        })?;
-        let right = right.map_err(|e| {
-            e.add_note(py, "Occurred while parsing right").unwrap();
-            e
-        })?;
-        py.detach(|| {
-            if exclude_last_update {
-                let (RawCompound::Map(mut left_compound), RawCompound::Map(mut right_compound)) =
-                    (left, right)
-                else {
-                    unreachable!();
-                };
-                let last_update = b"LastUpdate".as_slice();
-                left_compound.remove(last_update);
-                right_compound.remove(last_update);
-                Ok(left_compound == right_compound)
-            } else {
-                Ok(left == right)
-            }
-        })
+        py.detach(|| do_compare(left, right, exclude_last_update))
+            .map_err(|(e, side)| {
+                e.add_note(py, format!("Occurred while parsing {side}"))
+                    .unwrap();
+                e
+            })
+    }
+}
+
+fn do_compare(
+    left: &[u8],
+    right: &[u8],
+    exclude_last_update: bool,
+) -> Result<bool, (PyErr, &'static str)> {
+    let left = load_nbt_raw(left).map_err(|e| (e, "left"))?;
+    let right = load_nbt_raw(right).map_err(|e| (e, "right"))?;
+    match (exclude_last_update, left, right) {
+        (false, left, right) => Ok(left == right),
+        (true, RawCompound::Map(mut left), RawCompound::Map(mut right)) => {
+            let key = b"LastUpdate".as_slice();
+            left.remove(key);
+            right.remove(key);
+            Ok(left == right)
+        }
+        _ => unreachable!(),
     }
 }
