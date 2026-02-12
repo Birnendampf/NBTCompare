@@ -1,6 +1,7 @@
 use pyo3::exceptions::{PyOverflowError, PyValueError};
 use pyo3::prelude::*;
 use std::collections::HashMap;
+use std::io;
 use std::io::{Error, ErrorKind};
 
 #[derive(PartialEq)]
@@ -96,25 +97,26 @@ fn load_nbt_raw(data: &'_ [u8]) -> PyResult<RawCompound<'_>> {
     get_raw_compound(&mut data)
 }
 
-fn split_off<'a>(data: &mut &'a [u8], amount: usize) -> Result<&'a [u8], Error> {
+// Helper Functions
+
+fn split_off<'a>(data: &mut &'a [u8], amount: usize) -> io::Result<&'a [u8]> {
     let name = data
         .split_off(..amount)
         .ok_or(Error::new(ErrorKind::UnexpectedEof, "Unexpected EOF"))?;
     Ok(name)
 }
 
-fn get_u16(data: &mut &[u8]) -> Result<u16, Error> {
+fn get_u16(data: &mut &[u8]) -> io::Result<u16> {
     Ok(u16::from_be_bytes(split_off_chunk(data)?))
 }
 
-fn get_u8(data: &mut &[u8]) -> Result<u8, Error> {
+fn get_u8(data: &mut &[u8]) -> io::Result<u8> {
     Ok(*data
         .split_off_first()
         .ok_or(Error::new(ErrorKind::UnexpectedEof, "Unexpected EOF"))?)
 }
 
-#[inline]
-fn split_off_chunk<const N: usize>(data: &mut &[u8]) -> Result<[u8; N], Error> {
+fn split_off_chunk<const N: usize>(data: &mut &[u8]) -> io::Result<[u8; N]> {
     let res: &[u8; N];
     (res, *data) = data
         .split_first_chunk()
