@@ -4,6 +4,8 @@
 > This is a helper package for [MineDelta](https://github.com/Birnendampf/MineDelta)
 > and is not meant to be used directly.
 
+## Q&A
+
 ### Q: Why does this exist?
 
 A: TL;DR: Because MineDelta needs to compare **a lot** of chunk data to determine which chunks changed.
@@ -56,7 +58,6 @@ sequenceDiagram
     cppcls -->> caller: comparison result
     deactivate cppcls
     deactivate cppcls
-
 ```
 
 The python - c++ barrier is crossed 6 times! In the end this was just slightly faster than my Python implementation...  
@@ -80,19 +81,37 @@ sequenceDiagram
     end
     rsbuf -->>- caller: comparison result
     deactivate rsbuf
-
-
 ```
 
 Much neater :). On top of that, the rust "parser" (skimmer?) never actually copies from the passed in buffers (except
 when parsing integers). It only uses slices referencing the buffer.
 
-## Q: Can I use this for my own project?
+### Q: Can I use this for my own project?
 
 A: Sure. But you are on your own, I do not have the time to support use cases I did not intend for sorry.
 
-## Q: Why are there no tests?
+### Q: Why are there no tests?
 
 A:  
 ![my code is kinda testless :(](https://tenor.com/view/sad-hamster-meme-hamster-gif-12241975322025784948.gif)  
 (Working on it)
+
+## Benchmark
+
+Very irreproducible at the moment. will publish benchmarking code soon.
+Tested on Ryzen 7 7800X3D, Linux Mint 22.3, Linux 6.8.0-100
+
+```mermaid
+---
+config:
+    xyChart:
+        width: 900
+        height: 600
+        showDataLabel: true
+---
+xychart-beta horizontal
+    title "Time to create backup"
+    x-axis ["nbtcompare(processpool)", "nbtcompare(threadpool)", "nbtcompare", "rapidnbt (processpool)", "rapidnbt (threadpool)", "rapidnbt", "python (processpool)", "python (threadpool)", "python"]
+    y-axis "execution time (ms)" 0 --> 4500
+    bar [1738, 1817, 3925, 1748, 2965, 4131, 1769, 3012, 4208]
+```
