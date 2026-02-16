@@ -24,6 +24,9 @@ classifiers = [
 ]
 dependencies = []
 
+[project.urls]
+Source = "https://github.com/Birnendampf/NBTCompare"
+
 [tool.maturin]
 module-name = "nbtcompare._core"
 python-packages = ["nbtcompare"]
