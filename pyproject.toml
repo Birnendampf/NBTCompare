@@ -20,7 +20,7 @@ classifiers = [
     "Operating System :: MacOS :: MacOS X",
     "Operating System :: Microsoft :: Windows",
     "Operating System :: POSIX :: Linux",
-    "Python :: Implementation :: CPython",
+    "Programming Language :: Python :: Implementation :: CPython",
 ]
 dependencies = []
 
