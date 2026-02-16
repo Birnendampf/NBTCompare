@@ -3,13 +3,10 @@
 #
 #    maturin generate-ci github -o .github/workflows/release.yml
 #
-name: CI
+name: release
 
 on:
   push:
-    branches:
-      - main
-      - master
     tags:
       - '*'
   pull_request:
